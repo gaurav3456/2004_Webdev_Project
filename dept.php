@@ -21,8 +21,11 @@ try {
 
 if (empty($years) || empty($departments)) {
     echo "No data found. Please add some data to the expenses table.";
+    header("Location: ./index.php");
     return false;
 }
+
+
 
 $selectedYear = isset($_GET['year']) ? $_GET['year'] : $years[0];
 $selectedDepartment = isset($_GET['department']) ? $_GET['department'] : $departments[0];
@@ -43,6 +46,48 @@ try {
     }
 } catch (PDOException $e) {
     die("ERROR: Could not able to execute $sql. " . $e->getMessage());
+}
+
+
+
+try {
+    $sql1 = "SELECT * FROM expenses WHERE year = $selectedYear AND department = '$selectedDepartment'";
+    $resultpro = $pdo->query($sql1);
+    if ($resultpro->rowCount() > 0) {
+        $profitLine = array();
+        $months1 = array();
+        while ($row = $resultpro->fetch()) {
+            $profitLine[] = $row["revenue"] - $row["expense"];
+            $months1[] = $row["month"];
+        }
+        unset($resultpro);
+    } else {
+        echo "No records matching your query were found.";
+    }
+} catch (PDOException $e) {
+    die("ERROR: Could not able to execute $sql1. " . $e->getMessage());
+}
+
+
+
+try {
+    $sqlop = "SELECT * FROM expenses WHERE year = $selectedYear AND department = '$selectedDepartment'";
+    $resultop = $pdo->query($sqlop);
+    if ($resultop->rowCount() > 0) {
+        $operationalExpenses = array();
+        $nonOperationalExpenses = array();
+        $monthsop = array();
+        while ($row = $resultop->fetch()) {
+            $operationalExpenses[] = $row["operationalExpenses"];
+            $nonOperationalExpenses[] = $row["nonOperationalExpenses"];
+            $monthsop[] = $row["month"];
+        }
+        unset($resultop);
+    } else {
+        echo "No records matching your query were found.";
+    }
+} catch (PDOException $e) {
+    die("ERROR: Could not able to execute $sqlop. " . $e->getMessage());
 }
 
 unset($pdo);
@@ -66,25 +111,43 @@ unset($pdo);
         .content{
             padding-bottom: 0px;
         }
-        .main-panel{
-            height: 774px;
-        }
+       
+    
         .chartContainer {
-            padding-top: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }   
-        .chartBox {
-            width: 900px;
-            /* height: 100px; */
-            display: block;
-            margin-bottom: 20px;
-            background-color: #FFFFFF;
-            border-radius: 20px;
-            border: solid 1px #786028;
-            padding: 20px;
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            grid-template-rows: repeat(2, 1fr);
+            grid-gap: 20px;
         }
+
+        .chartBox {
+            box-sizing: border-box;
+            padding: 20px;
+            border: solid 1px #454545;
+            border-radius: 20px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+        .barchart1 {
+            grid-column: 1 / 2;
+            grid-row: 1 / 2;
+        }
+
+            .barchart2 {
+            grid-column: 2 / 3;
+            grid-row: 1 / 2;
+        }
+
+            .linechart1 {
+            grid-column: 1 / 2;
+            grid-row: 2 / 3;
+        }
+
+            .linechart2 {
+            grid-column: 2 / 3;
+            grid-row: 2 / 3;
+        }
+        
     </style>
 </head>
 <body >
@@ -122,6 +185,7 @@ unset($pdo);
               <p>Data</p>
             </a>
           </li>
+          
 
           <li>
             <a href="#">
@@ -159,15 +223,34 @@ unset($pdo);
         </form>
     <div class="chartContainer">
 
-        <div class="chartBox">
+        <div class="chartBox barchart1">
             <canvas  id="revenueChart"></canvas>
         </div>
-        <div class="chartBox">
+        <div class="chartBox barchart2">
             <canvas  id="expenseChart"></canvas>
         </div>
+        <div class="chartBox linechart1">
+            <canvas id="profit"></canvas>
+        </div>
+        <div class="chartBox linechart2">
+            <canvas id="opnonopchart"></canvas> 
+        </div>
+
     </div>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+
+// Line chart profit
+const profitLine = <?php echo json_encode($profitLine); ?>;
+const months1 = <?php echo json_encode($months1); ?>;
+
+
+
+//operationa/non line graph
+const operationalExpenses = <?php echo json_encode($operationalExpenses); ?>;
+const nonOperationalExpenses = <?php echo json_encode($nonOperationalExpenses); ?>;
+const monthsop = <?php echo json_encode($monthsop); ?>;
+
     const revenue = <?php echo json_encode($revenue); ?>;
     const expenses = <?php echo json_encode($expenses); ?>;
     const labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
@@ -201,13 +284,17 @@ unset($pdo);
     };
 
     const chartOptions = {
-        aspectRatio: 3,
-        scales: {
-            y: {
-                beginAtZero: true
+    scales: {
+        y: {
+            beginAtZero: true,
+            ticks: {
+                callback: function(value, index, values) {
+                    return '₹' + value;
+                }
             }
         }
-    };
+    }
+};
 
     const revenueChart = new Chart(
         document.getElementById('revenueChart'),
@@ -226,6 +313,87 @@ unset($pdo);
             options: chartOptions
         }
     );
+
+
+
+
+    const chartDataLineprofit = {
+    labels: months1,
+    datasets: [
+        {
+            label: 'Profit',
+            data: profitLine,
+            fill: false,
+            backgroundColor: '#FFCB91',
+            borderColor: '#FFCB91',
+            tension: 0.1,
+            pointBackgroundColor: profitLine.map(value => value < 0 ? '#FF0000' : '#FFCB91'),
+            pointBorderColor: '#000000',
+            pointRadius: 4,
+            pointHoverRadius: 6
+        }
+    ]
+};
+
+const chartOptionsprofit = {
+    // maintainAspectRatio: false,
+    // aspectRatio: 3,
+
+    scales: {
+        y: {
+            ticks: {
+                callback: function(value, index, values) {
+                    return '₹' + value;
+                }
+            }
+        }
+    }
+};
+
+const profitLineChart = new Chart(
+    document.getElementById('profit'),
+    {
+        type: 'line',
+        data: chartDataLineprofit,
+        options: chartOptionsprofit
+    }
+);
+
+
+//Op/nonOp Line graph
+const chartDataOpline = {
+        labels: monthsop,
+        datasets: [
+            {
+                label: 'OpExpenses',
+                data: operationalExpenses,
+                fill: false,
+                backgroundColor: '#668586',
+                borderColor: '#668586',
+
+                tension: 0.1
+            },
+            {
+                label: 'nonOpExpense',
+                data: nonOperationalExpenses,
+                fill: false,
+                backgroundColor: '#00c9ae',
+                borderColor: '#00c9ae',
+
+                tension: 0.1
+            }
+        ]
+    };
+
+    const opnonopchart = new Chart(
+        document.getElementById('opnonopchart'),
+        {
+            type: 'line',
+            data: chartDataOpline,
+            options: chartOptions
+        }
+    );
+
 </script>
 </body>
 </html>

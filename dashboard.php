@@ -4,6 +4,7 @@ $dbname = 'op_expenses';
 $username = 'root';
 $password = '';
 
+// Create a new PDO object and set the error mode to exceptions
 try {
     $pdo = new PDO("mysql:host=$host;dbname=$dbname", $username, $password);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
@@ -11,6 +12,7 @@ try {
     die("ERROR: Could not connect. " . $e->getMessage());
 }
 
+// Get a list of distinct years and departments from the expenses table
 try {
     $years = $pdo->query("SELECT DISTINCT year FROM expenses ORDER BY year ASC")->fetchAll(PDO::FETCH_COLUMN);
     $departments = $pdo->query("SELECT DISTINCT department FROM expenses ORDER BY department ASC")->fetchAll(PDO::FETCH_COLUMN);
@@ -18,28 +20,25 @@ try {
     die("ERROR: Could not able to execute query. " . $e->getMessage()); 
 }
 
+// If there is no data in the table, redirect to the index page
 if (empty($years) || empty($departments)) {
     echo "No data found. Please add some data to the expenses table.";
     header("Location: ./index.php");
     return false;
 }
 
+// Get the year selected by the user, or use the first year by default
 $selectedYear = isset($_GET['year']) ? $_GET['year'] : $years[0];
-$selectedDepartment = isset($_GET['department']) ? $_GET['department'] : $departments[0];
+// $selectedDepartment = isset($_GET['department']) ? $_GET['department'] : $departments[0];
 
+// Query the database to get the total revenue and expense for the selected year
 try {
-    $sqlpie = "SELECT year, SUM(revenue) as revenue, SUM(expense) as expense FROM expenses WHERE department = '$selectedDepartment' GROUP BY year";
+    $sqlpie = "SELECT SUM(revenue) as revenue, SUM(expense) as expense FROM expenses WHERE year = '$selectedYear'";
     $resultpie = $pdo->query($sqlpie);
     if ($resultpie->rowCount() > 0) {
-        $revenuepie = array();
-        $expensespie = array();
-        $years = array();
-        while ($row = $resultpie->fetch()) {
-            $revenuepie[] = $row["revenue"];
-            $expensespie[] = $row["expense"];
-            $years[] = $row["year"];
-        }
-        unset($resultpie);
+        $row = $resultpie->fetch();
+        $revenuepie = array($row["revenue"]);
+        $expensespie = array($row["expense"]);
     } else {
         echo "No records matching your query were found.";
     }
@@ -47,19 +46,26 @@ try {
     die("ERROR: Could not able to execute $sqlpie. " . $e->getMessage());
 }
 
+// Query the database to get the total revenue and expense for each month of the selected year
 try {
-    $sql = "SELECT * FROM expenses WHERE year = $selectedYear AND department = '$selectedDepartment'";
+    $sql = "SELECT month, SUM(revenue) as total_revenue, SUM(expense) as total_expense FROM expenses WHERE year = $selectedYear GROUP BY month";
     $result = $pdo->query($sql);
+
+    // If any rows were returned, store the revenue, expense, and month values in separate arrays
     if ($result->rowCount() > 0) {
-        $revenue = array();
-        $expenses = array();
+        $totalRevenue = array();
+        $totalExpenses = array();
         $months = array();
         while ($row = $result->fetch()) {
-            $revenue[] = $row["revenue"];
-            $expenses[] = $row["expense"];
+            $totalRevenue[] = $row["total_revenue"];
+            $totalExpenses[] = $row["total_expense"];
             $months[] = $row["month"];
         }
         unset($result);
+
+        // Sort the months array in chronological order
+        $timestamps = array_map('strtotime', $months);
+        array_multisort($timestamps, $months, $totalRevenue, $totalExpenses);
     } else {
         echo "No records matching your query were found.";
     }
@@ -74,8 +80,11 @@ try {
         $profitsdonut = array();
         $departmentsdonut = array();
         while ($row = $resultdonut->fetch()) {
-            $profitsdonut[] = $row["profit"];
-            $departmentsdonut[] = $row["department"];
+            $profit = $row["profit"];
+            if ($profit >= 0) { // filter out negative profit values
+                $profitsdonut[] = $profit;
+                $departmentsdonut[] = $row["department"];
+            }
         }
         unset($resultdonut);
     } else {
@@ -84,18 +93,18 @@ try {
 } catch (PDOException $e) {
     die("ERROR: Could not able to execute $sqldonut. " . $e->getMessage());
 }
-
+$sql = "SELECT month, SUM(revenue) as total_revenue, SUM(expense) as total_expense FROM expenses WHERE year = $selectedYear GROUP BY month";
 
 try {
-    $sqlop = "SELECT * FROM expenses WHERE year = $selectedYear AND department = '$selectedDepartment'";
+    $sqlop = "SELECT month, SUM(operationalExpenses) as total_op_expenses, SUM(nonOperationalExpenses) as total_nonop_expenses FROM expenses WHERE year = $selectedYear GROUP BY month";
     $resultop = $pdo->query($sqlop);
     if ($resultop->rowCount() > 0) {
         $operationalExpenses = array();
         $nonOperationalExpenses = array();
         $monthsop = array();
         while ($row = $resultop->fetch()) {
-            $operationalExpenses[] = $row["operationalExpenses"];
-            $nonOperationalExpenses[] = $row["nonOperationalExpenses"];
+            $operationalExpenses[] = $row["total_op_expenses"];
+            $nonOperationalExpenses[] = $row["total_nonop_expenses"];
             $monthsop[] = $row["month"];
         }
         unset($resultop);
@@ -219,15 +228,6 @@ unset($pdo);
             }
             ?>
         </select>
-        <label for="department">Department:</label>
-        <select name="department" id="department">
-            <?php
-            foreach ($departments as $department) {
-                $selected = $department == $selectedDepartment ? 'selected' : '';
-                echo "<option value=\"$department\" $selected>$department</option>";
-            }
-            ?>
-        </select>
         <button type="submit">Update</button>
     </form>
     <div class="chartContainer">
@@ -252,13 +252,15 @@ unset($pdo);
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-// Pie chart
-const revenuepie = <?php echo json_encode($revenuepie); ?>;  
+
+// convert the $revenuepie PHP variable into a JSON-encoded string.
+// Get revenue and expense data from PHP
+const revenuepie = <?php echo json_encode($revenuepie); ?>;
 const expensespie = <?php echo json_encode($expensespie); ?>;
-const years = <?php echo json_encode($years); ?>;
+const selectedYear = '<?php echo $selectedYear; ?>';
 // Line chart
-const revenueLine = <?php echo json_encode($revenue); ?>;  
-const expensesLine = <?php echo json_encode($expenses); ?>;
+const totalRevenueLine = <?php echo json_encode($totalRevenue); ?>;  
+const totalExpensesLine = <?php echo json_encode($totalExpenses); ?>;
 const months = <?php echo json_encode($months); ?>;
 // Donut Chart
 const profits = <?php echo json_encode($profitsdonut); ?>;
@@ -269,63 +271,84 @@ const operationalExpenses = <?php echo json_encode($operationalExpenses); ?>;
 const nonOperationalExpenses = <?php echo json_encode($nonOperationalExpenses); ?>;
 const monthsop = <?php echo json_encode($monthsop); ?>;
 
-// Pie chart 
+// Pie chart data
 const chartData = {
-    labels: ['Revenue', 'Expense'],
-    datasets: [
-        {
-            label: 'Revenue vs Expense',
-            data: [revenuepie[0], expensespie[0]],
-            backgroundColor: [
-                // 'rgba(75, 192, 192, 0.2)',
-                // 'rgba(255, 99, 132, 0.2)',
-                '#FFCB91',
-                '#B9EDDD',
-            ],
-            borderColor: [
-                // 'FFBF9B',
-                '#FFA931',
-                '#35C7AD',
-            ],
-            borderWidth: 1
-        },
-    ]
-};
-const chartOptions = {
+            labels: ['Revenue', 'Expense'],
+            datasets: [
+                {
+                    label: `Revenue vs Expense (${selectedYear})`,
+                    data: [revenuepie[0], expensespie[0]],
+                    backgroundColor: [
+                        '#FFCB91',
+                        '#B9EDDD',
+                    ],
+                    borderColor: [
+                        '#FFA931',
+                        '#35C7AD',
+                    ],
+                    borderWidth: 1
+                }
+            ]
+        };
+        // Pie chart options
+
+        const chartPieOptions = {
     scales: {
         y: {
-            beginAtZero: true
+            grid: {
+                z: -1
+            },
+            ticks: {
+                display: false
+            }
         }
     }
 };
-const revenueExpenseChart = new Chart(
-    document.getElementById('revenueExpenseChart'),
-    {
-        type: 'pie',
-        data: chartData,
-        options: chartOptions
+
+const chartOptions = {
+    scales: {
+        y: {
+            beginAtZero: true,
+            ticks: {
+                callback: function(value, index, values) {
+                    return '₹' + value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+                }
+            },
+            title: {
+                display: true,
+                text: 'Amount (in Rupees)'
+            }
+        }
     }
-);
+};
+
+        // Create pie chart
+        const revenueExpenseChart = new Chart(
+            document.getElementById('revenueExpenseChart'),
+            {
+                type: 'pie',
+                data: chartData,
+                options: chartPieOptions
+            }
+        );
 // Line chart
 const chartDataLine = {
     labels: months,
     datasets: [
         {
-            label: 'Revenue',
-            data: revenueLine,
+            label: 'Total Revenue',
+            data: totalRevenueLine,
             fill: false,
             backgroundColor: '#FFCB91',
             borderColor: '#FFCB91',
-
             tension: 0.1
         },
         {
-            label: 'Expense',
-            data: expensesLine,
+            label: 'Total Expense',
+            data: totalExpensesLine,
             fill: false,
-            backgroundColor: '#B9EDDD',
+            backgroundColor: '#6FD0C3',
             borderColor: '#6FD0C3',
-
             tension: 0.1
         }
     ]
@@ -338,13 +361,13 @@ const revenueExpenseLineChart = new Chart(
         options: chartOptions
     }
 );
-
 //Donut Chart
 const chartDatadonut = {
         labels: departments,
         datasets: [
         {
-            label: 'Profit',
+            // label: `Revenue vs Expense (${selectedYear})`,
+            label: `Profit (${selectedYear})`,
             data: profits,
             backgroundColor: [
             // '#FAD8FF',//pink
@@ -372,7 +395,7 @@ const profitChart = new Chart(
     {
         type: 'doughnut',
         data: chartDatadonut,
-        options: chartOptions
+        options: chartPieOptions
     }
 );
 

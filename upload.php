@@ -42,8 +42,15 @@ while (($data = fgetcsv($handle, 1000, ",")) !== FALSE) {
   $operationalExpenses = mysqli_real_escape_string($conn, $data[5]);
   $nonOperationalExpenses = mysqli_real_escape_string($conn, $data[6]);
 
-  // Insert the row into the database
-  $sql = "INSERT INTO expenses (year, month, expense, revenue, department, operationalExpenses, nonOperationalExpenses) VALUES ('$year', '$month', '$expense', '$revenue', '$department', '$operationalExpenses', '$nonOperationalExpenses')";
+  // Insert the row into the database using the INSERT INTO...ON DUPLICATE KEY UPDATE statement
+  // $sql = "INSERT INTO expenses (year, month, expense, revenue, department, operationalExpenses, nonOperationalExpenses) VALUES ('$year', '$month', '$expense', '$revenue', '$department', '$operationalExpenses', '$nonOperationalExpenses') ON DUPLICATE KEY UPDATE expense = expense + VALUES(expense), revenue = revenue + VALUES(revenue), operationalExpenses = operationalExpenses + VALUES(operationalExpenses), nonOperationalExpenses = nonOperationalExpenses + VALUES(nonOperationalExpenses)";
+  $sql = "INSERT INTO expenses (year, month, expense, revenue, department, operationalExpenses, nonOperationalExpenses) 
+  VALUES ('$year', '$month', '$expense', '$revenue', '$department', '$operationalExpenses', '$nonOperationalExpenses') 
+  ON DUPLICATE KEY UPDATE 
+      expense = '$expense', 
+      revenue = '$revenue', 
+      operationalExpenses = '$operationalExpenses', 
+      nonOperationalExpenses = '$nonOperationalExpenses'";
   mysqli_query($conn, $sql);
 }
 

@@ -66,7 +66,11 @@
         <!-- <h1>Hiii</h1> -->
         <!-- <h2>Revenue and Expense Charts</h2> -->
         <a href="#" onclick="if (confirm('Are you sure you want to clear all expenses data?')) { window.location.href = 'clear.php'; }">Clear Data<br><br></a>
-
+        <form action="upload.php" method="post" enctype="multipart/form-data">
+          <input type="file" name="csv_file">
+          <input class="upload" type="submit" name="submit" value="Upload CSV">
+        </form>
+        <br>
         <?php
     // Connect to the database
     $db_host = "localhost";
